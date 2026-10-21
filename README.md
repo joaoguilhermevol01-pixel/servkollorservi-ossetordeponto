@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Corporate - Gestão de Compensação de Recesso</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- SheetJS para Excel -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        /* Modo Alto Contraste */
+        .high-contrast {
+            background-color: #000000 !important;
+            color: #ffffff !important;
+        }
+        .high-contrast .bg-white, 
+        .high-contrast .bg-slate-50, 
+        .high-contrast .bg-slate-100,
+        .high-contrast .bg-slate-800 {
+            background-color: #121212 !important;
+            color: #ffffff !important;
+            border-color: #333333 !important;
+        }
+        .high-contrast button {
+            border: 1px solid #ffffff !important;
+        }
+
+        /* Papai Noel Temporário (10s) */
+        .santa-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9990;
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+            pointer-events: none;
+            transition: opacity 1s ease, transform 1s ease;
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .santa-container.hide-santa {
+            opacity: 0;
+            transform: translateY(20px);
+            pointer-events: none;
+        }
+        .santa-bubble {
+            background: #ffffff;
+            color: #c8102e;
+            font-weight: 800;
+            font-size: 12px;
+            padding: 10px 16px;
+            border-radius: 16px 16px 0px 16px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.15);
+            border: 2px solid #c8102e;
+            white-space: nowrap;
+            animation: pulse-subtle 2s infinite;
+        }
+        .santa-icon {
+            font-size: 46px;
+            line-height: 1;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15));
+        }
+
+        @keyframes pulse-subtle {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+
+        /* Regras de Impressão (Impede página em branco) */
+        @media print {
+            body {
+                background: white !important;
+                color: black !important;
+            }
+            body > *:not(#modalImpressaoIndividual) {
+                display: none !important;
+            }
+            #modalImpressaoIndividual {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                background: white !important;
+                display: block !important;
+            }
+            #modalImpressaoIndividual > div {
+                box-shadow: none !important;
+                border: none !important;
+                max-width: 100% !important;
+                padding: 0 !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body id="bodyMain" class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans p-4 md:p-8 transition-all duration-200">
+
+    <!-- PAPAI NOEL TEMPORÁRIO (10 SEGUNDOS) -->
+    <div id="santaWidget" class="santa-container no-print">
+        <div class="santa-bubble">
+            🎅 FELIZ NATAL E BOAS FESTAS! 🎉
+        </div>
+        <div class="santa-icon">🎅</div>
+    </div>
+
+    <!-- WIDGET VLIBRAS -->
+    <div vw class="enabled no-print">
+        <div vw-access-button class="active"></div>
+        <div vw-plugin-wrapper>
+            <div class="vw-plugin-top-wrapper"></div>
+        </div>
+    </div>
+    <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+    <script>new window.VLibras.Widget('https://vlibras.gov.br/app');</script>
+
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <!-- Barra de Acessibilidade (APENAS 1 BOTÃO DE MODO ESCURO/CLARO) -->
+        <div class="flex flex-wrap justify-between items-center bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm gap-3 no-print">
+            <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mr-2">
+                    <i data-lucide="accessibility" class="w-4 h-4 text-blue-600"></i> Acessibilidade corporativa:
+                </span>
+                <button onclick="alterarFonte(1)" title="Aumentar Fonte" class="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-xs font-black rounded border border-slate-300 dark:border-slate-600">A+</button>
+                <button onclick="alterarFonte(-1)" title="Diminuir Fonte" class="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-xs font-black rounded border border-slate-300 dark:border-slate-600">A-</button>
+                <button onclick="toggleAltoContraste()" title="Alto Contraste" class="px-3 py-1 bg-slate-800 text-amber-400 text-xs font-bold rounded border border-slate-600 flex items-center gap-1.5">
+                    <i data-lucide="eye" class="w-3.5 h-3.5"></i> Contraste
+                </button>
+            </div>
+
+            <button onclick="toggleDarkMode()" class="px-3.5 py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg border border-slate-300 dark:border-slate-600 font-bold text-xs flex items-center gap-2">
+                <i id="themeIcon" data-lucide="moon" class="w-4 h-4 text-indigo-500"></i>
+                <span id="themeTxt">Modo Escuro</span>
+            </button>
+        </div>
+
+        <!-- Seleção de Empresa (Abas) -->
+        <div class="flex border-b border-slate-200 dark:border-slate-700 gap-2 no-print">
+            <button id="tabServkollor" onclick="mudarEmpresa('SERVKOLLOR')" class="px-6 py-3 font-bold text-sm rounded-t-xl transition-all flex items-center gap-2 bg-white dark:bg-slate-800 text-[#C8102E] border-t-4 border-t-[#C8102E] shadow-sm">
+                <i data-lucide="building-2" class="w-4 h-4"></i> SERVKOLLOR SERVIÇOS
+            </button>
+            <button id="tabRenova" onclick="mudarEmpresa('RENOVA')" class="px-6 py-3 font-bold text-sm rounded-t-xl transition-all flex items-center gap-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300">
+                <i data-lucide="building" class="w-4 h-4"></i> RENOVA SERVIÇOS
+            </button>
+        </div>
+
+        <!-- Cabeçalho -->
+        <header id="headerEmpresa" class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-2xl border border-slate-200 dark:border-slate-600">
+                    🏢
+                </div>
+                <div>
+                    <h1 id="nomeEmpresaHeader" class="text-xl md:text-2xl font-black tracking-tight leading-none">
+                        <span class="text-[#C8102E]">SERVKOLLOR</span>
+                    </h1>
+                    <span id="subtituloEmpresaHeader" class="text-blue-600 dark:text-blue-400 font-bold text-xs tracking-wider uppercase block mt-1">SERVIÇOS LTDA</span>
+                    <p class="text-slate-500 dark:text-slate-400 text-xs font-medium mt-0.5">Painel Executivo de Controle de Recesso e Compensações</p>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 no-print">
+                <button id="btnLock" onclick="toggleModoAdmin()" class="px-3.5 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-lg flex items-center gap-1.5 border border-slate-300 dark:border-slate-600 transition-colors">
+                    <i id="iconLock" data-lucide="lock" class="w-4 h-4 text-amber-600"></i> <span id="txtLock">Modo Leitura</span>
+                </button>
+                <button onclick="exportarExcel()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-sm transition-colors">
+                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Exportar (.xlsx)
+                </button>
+                <button onclick="restaurarDadosIniciais()" class="px-3.5 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg flex items-center gap-1.5 border border-slate-300 dark:border-slate-600">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Restaurar Dados
+                </button>
+            </div>
+        </header>
+
+        <!-- Dashboard de Métricas CENTRALIZADAS -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-white dark:bg-slate-800 p-4.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm text-center flex flex-col items-center justify-center">
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider text-center w-full">Total de Registros</p>
+                <p id="dashTotal" class="text-3xl font-extrabold text-slate-800 dark:text-slate-100 mt-2 text-center">0</p>
+            </div>
+            <div class="bg-white dark:bg-slate-800 p-4.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm border-l-4 border-l-emerald-500 text-center flex flex-col items-center justify-center">
+                <p class="text-xs font-bold text-emerald-600 uppercase tracking-wider text-center w-full">Metas Concluídas (100%)</p>
+                <p id="dashConcluidos" class="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-2 text-center">0</p>
+            </div>
+            <div class="bg-white dark:bg-slate-800 p-4.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm border-l-4 border-l-amber-500 text-center flex flex-col items-center justify-center">
+                <p class="text-xs font-bold text-amber-600 uppercase tracking-wider text-center w-full">Em Andamento (50%-99%)</p>
+                <p id="dashEmAndamento" class="text-3xl font-extrabold text-amber-600 dark:text-amber-400 mt-2 text-center">0</p>
+            </div>
+            <div class="bg-white dark:bg-slate-800 p-4.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm border-l-4 border-l-rose-500 text-center flex flex-col items-center justify-center">
+                <p class="text-xs font-bold text-rose-600 uppercase tracking-wider text-center w-full">Longe da Meta (&lt;50%)</p>
+                <p id="dashAtencao" class="text-3xl font-extrabold text-rose-600 dark:text-rose-400 mt-2 text-center">0</p>
+            </div>
+        </div>
+
+        <!-- Formulário de Registo e Edição -->
+        <div id="areaFormulario" class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 no-print">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="tituloForm" class="text-xs font-black text-slate-700 dark:text-slate-200 flex items-center gap-2 uppercase tracking-wider">
+                    <i data-lucide="user-plus" class="w-4 h-4 text-blue-600"></i> Lançamento e Atualização de Colaboradores
+                </h2>
+                <button id="btnCancelarEdicao" onclick="cancelarEdicao()" class="hidden text-xs text-rose-600 hover:underline font-semibold">
+                    Cancelar Edição
+                </button>
+            </div>
+
+            <form id="formColaborador" onsubmit="salvarColaborador(event)" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <input type="hidden" id="editId">
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Nome Completo *</label>
+                    <input type="text" id="nome" required placeholder="EX: MARIA DA SILVA" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white rounded-lg text-sm uppercase focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Órgão / Setor *</label>
+                    <input type="text" id="orgaoInput" required list="listaOrgaosData" placeholder="Selecione ou digite..." class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white rounded-lg text-sm uppercase focus:ring-2 focus:ring-blue-500 outline-none">
+                    <datalist id="listaOrgaosData"></datalist>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Cidade / Município *</label>
+                    <input type="text" id="cidade" required list="listaCidadesData" placeholder="Ex: PORTO VELHO" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white rounded-lg text-sm uppercase focus:ring-2 focus:ring-blue-500 outline-none">
+                    <datalist id="listaCidadesData">
+                        <option value="PORTO VELHO"></option>
+                        <option value="ARIQUEMES"></option>
+                        <option value="JI-PARANÁ"></option>
+                        <option value="CACOAL"></option>
+                        <option value="VILHENA"></option>
+                        <option value="ROLIM DE MOURA"></option>
+                        <option value="GUAJARÁ-MIRIM"></option>
+                    </datalist>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Período de Recesso *</label>
+                    <select id="tipoRecesso" required class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="NATAL">RECESSO DE NATAL</option>
+                        <option value="ANO NOVO">RECESSO DE ANO NOVO</option>
+                        <option value="AMBOS">NATAL & ANO NOVO (AMBOS)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Data Início</label>
+                    <input type="date" id="dataInicioCompensa" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white rounded-lg text-sm font-semibold outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Data Fim</label>
+                    <input type="date" id="dataFimCompensa" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white rounded-lg text-sm font-semibold outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Horas Total a Compensar *</label>
+                    <input type="text" id="horasTotal" required placeholder="Ex: 32:00" onblur="formatarHoraPadrao(this)" oninput="mascaraHora(this)" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white rounded-lg text-sm font-bold outline-none">
+                </div>
+
+                <div>
+                    <label id="lblHorasCompensadas" class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Horas Compensadas *</label>
+                    <input type="text" id="horasCompensadas" required placeholder="Ex: 08:00" onblur="formatarHoraPadrao(this)" oninput="mascaraHora(this)" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white rounded-lg text-sm font-bold outline-none">
+                </div>
+
+                <!-- CAMPO DE SOMA DE HORAS CUMPRIDAS -->
+                <div class="md:col-span-2 bg-slate-50 dark:bg-slate-700/40 p-3 rounded-lg border border-slate-200 dark:border-slate-600">
+                    <label class="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1 flex items-center gap-1">
+                        <i data-lucide="calculator" class="w-3.5 h-3.5"></i> Somar Horas Cumpridas no Dia
+                    </label>
+                    <div class="flex gap-2">
+                        <input type="text" id="horasDiaAdd" placeholder="Ex: 02:00 ou 2" onblur="formatarHoraPadrao(this)" oninput="mascaraHora(this)" class="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white rounded-lg text-sm font-bold outline-none">
+                        <button type="button" onclick="adicionarHorasDia()" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs whitespace-nowrap flex items-center gap-1 shadow-sm">
+                            <i data-lucide="plus" class="w-3.5 h-3.5"></i> + Somar
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Data de Verificação</label>
+                    <input type="text" id="verificacao" readonly class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-600 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-bold text-slate-500 dark:text-slate-200 outline-none cursor-not-allowed">
+                </div>
+
+                <div class="md:col-span-1 flex items-end">
+                    <button type="submit" id="btnSalvar" class="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm transition-colors flex justify-center items-center gap-2 shadow-sm">
+                        <i data-lucide="save" class="w-4 h-4"></i> Salvar Registro
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Tabela Principal -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50/50 dark:bg-slate-800">
+                <h3 class="font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider flex items-center gap-2">
+                    <i data-lucide="list" class="w-4 h-4 text-blue-600"></i> Registros de Colaboradores
+                </h3>
+                
+                <div class="flex flex-wrap gap-2 w-full md:w-auto no-print">
+                    <select id="ordenacaoSelect" onchange="renderizarTabela()" class="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-bold bg-white dark:bg-slate-700 dark:text-white outline-none">
+                        <option value="nome_asc">🔤 Ordem Alfabética (A - Z)</option>
+                        <option value="nome_desc">🔤 Ordem Alfabética (Z - A)</option>
+                        <option value="status_atencao">⚠️ Longe da Meta Primeiro</option>
+                        <option value="status_concluido">✅ Concluídos Primeiro</option>
+                    </select>
+
+                    <select id="filtroOrgaoSelect" onchange="renderizarTabela()" class="px-3 py-2 border-2 border-blue-500 rounded-lg text-xs font-bold bg-white dark:bg-slate-700 dark:text-white outline-none">
+                        <option value="todos">-- TODOS OS ÓRGÃOS --</option>
+                    </select>
+
+                    <input type="text" id="buscaNome" oninput="renderizarTabela()" placeholder="Buscar colaborador..." class="px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white rounded-lg text-xs outline-none">
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-slate-600 dark:text-slate-300">
+                    <thead class="bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 uppercase text-xs font-bold tracking-wider border-b border-slate-200 dark:border-slate-600">
+                        <tr>
+                            <th class="p-4">Colaborador</th>
+                            <th class="p-4">Órgão / Cidade</th>
+                            <th class="p-4 text-center">Recesso</th>
+                            <th class="p-4 text-center">Horas Total</th>
+                            <th class="p-4 text-center">Compensado</th>
+                            <th class="p-4 text-center">Saldo Devedor</th>
+                            <th class="p-4 text-center">Status / Progresso</th>
+                            <th class="p-4 text-center no-print">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaCorpo" class="divide-y divide-slate-200 dark:divide-slate-700">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- MODAL DE IMPRESSÃO INDIVIDUAL -->
+    <div id="modalImpressaoIndividual" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-2xl w-full p-6 space-y-6 border border-slate-200 dark:border-slate-700">
+            <div class="flex justify-between items-center border-b dark:border-slate-700 pb-3 no-print">
+                <h3 class="font-bold text-slate-800 dark:text-slate-100 text-base flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-5 h-5 text-blue-600"></i> Relatório de Conformidade do Colaborador
+                </h3>
+                <button onclick="fecharModalIndividual()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div id="areaImpressaoIndividual" class="space-y-4">
+                <div class="border-b pb-4 mb-4">
+                    <h2 id="impEmpresa" class="text-xl font-black text-slate-800">SERVKOLLOR SERVIÇOS LTDA</h2>
+                    <p class="text-xs text-slate-500 font-bold uppercase tracking-wider">Ficha Individual de Compensação de Recesso</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                        <span class="block text-slate-400 font-semibold">Colaborador:</span>
+                        <p id="impNome" class="text-sm font-bold text-slate-800 uppercase"></p>
+                    </div>
+                    <div>
+                        <span class="block text-slate-400 font-semibold">Órgão / Setor:</span>
+                        <p id="impOrgao" class="text-sm font-bold text-slate-800 uppercase"></p>
+                    </div>
+                    <div>
+                        <span class="block text-slate-400 font-semibold">Cidade:</span>
+                        <p id="impCidade" class="text-sm font-bold text-slate-800 uppercase"></p>
+                    </div>
+                    <div>
+                        <span class="block text-slate-400 font-semibold">Período de Recesso:</span>
+                        <p id="impRecesso" class="text-sm font-bold text-slate-800 uppercase"></p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 bg-slate-50 p-4 rounded-lg border text-center my-4">
+                    <div>
+                        <span class="block text-[10px] text-slate-400 uppercase font-bold">Meta de Horas</span>
+                        <p id="impHorasTotal" class="text-lg font-black text-slate-800"></p>
+                    </div>
+                    <div>
+                        <span class="block text-[10px] text-slate-400 uppercase font-bold">Compensado</span>
+                        <p id="impHorasCompensadas" class="text-lg font-black text-emerald-600"></p>
+                    </div>
+                    <div>
+                        <span class="block text-[10px] text-slate-400 uppercase font-bold">Saldo Restante</span>
+                        <p id="impHorasFalta" class="text-lg font-black text-rose-600"></p>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="text-xs font-bold text-slate-700 uppercase mb-2">Histórico de Lançamentos:</h4>
+                    <table class="w-full text-left text-xs border">
+                        <thead class="bg-slate-100 font-bold text-slate-700 border-b">
+                            <tr>
+                                <th class="p-2">Data da Verificação</th>
+                                <th class="p-2">Horas Lançadas</th>
+                                <th class="p-2">Saldo Registrado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="impHistCorpo" class="divide-y">
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pt-8 grid grid-cols-2 gap-8 text-center text-xs mt-8">
+                    <div>
+                        <div class="border-t border-slate-400 pt-1">Assinatura do Colaborador</div>
+                    </div>
+                    <div>
+                        <div class="border-t border-slate-400 pt-1">Responsável / Recursos Humanos</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2 border-t dark:border-slate-700 no-print">
+                <button onclick="fecharModalIndividual()" class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-lg">Fechar</button>
+                <button onclick="imprimirFichaIndividual()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow">
+                    <i data-lucide="printer" class="w-4 h-4"></i> Imprimir Ficha
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Principal -->
+    <script>
+        let tamanhoFonteAtual = 100;
+
+        // Oculta o Papai Noel após 10 segundos
+        setTimeout(() => {
+            const santa = document.getElementById('santaWidget');
+            if (santa) santa.classList.add('hide-santa');
+        }, 10000);
+
+        function alterarFonte(delta) {
+            tamanhoFonteAtual += delta * 5;
+            if (tamanhoFonteAtual < 85) tamanhoFonteAtual = 85;
+            if (tamanhoFonteAtual > 125) tamanhoFonteAtual = 125;
+            document.body.style.fontSize = tamanhoFonteAtual + '%';
+        }
+
+        function toggleAltoContraste() {
+            document.body.classList.toggle('high-contrast');
+        }
+
+        function toggleDarkMode() {
+            const html = document.documentElement;
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                localStorage.setItem('theme_mode', 'light');
+                document.getElementById('themeTxt').innerText = "Modo Escuro";
+                document.getElementById('themeIcon').setAttribute('data-lucide', 'moon');
+            } else {
+                html.classList.add('dark');
+                localStorage.setItem('theme_mode', 'dark');
+                document.getElementById('themeTxt').innerText = "Modo Claro";
+                document.getElementById('themeIcon').setAttribute('data-lucide', 'sun');
+            }
+            lucide.createIcons();
+        }
+
+        function carregarTema() {
+            if (localStorage.getItem('theme_mode') === 'dark') {
+                document.documentElement.classList.add('dark');
+                document.getElementById('themeTxt').innerText = "Modo Claro";
+                document.getElementById('themeIcon').setAttribute('data-lucide', 'sun');
+            }
+        }
+
+        function mascaraHora(input) {
+            let v = input.value.replace(/\D/g, "");
+            if (v.length > 4) v = v.substring(0, 4);
+            if (v.length > 2) {
+                input.value = v.substring(0, v.length - 2) + ":" + v.substring(v.length - 2);
+            } else {
+                input.value = v;
+            }
+        }
+
+        function formatarHoraPadrao(input) {
+            let val = input.value.trim().replace('H', '').replace('h', '');
+            if (!val) return;
+            if (!val.includes(':')) {
+                const num = parseInt(val, 10);
+                if (!isNaN(num)) input.value = `${String(num).padStart(2, '0')}:00`;
+            } else {
+                const p = val.split(':');
+                input.value = `${String(parseInt(p[0])||0).padStart(2, '0')}:${String(parseInt(p[1])||0).padStart(2, '0')}`;
+            }
+        }
+
+        function paraMinutos(str) {
+            if (!str) return 0;
+            const p = str.toString().replace('H', '').trim().split(':');
+            return ((parseInt(p[0]) || 0) * 60) + (parseInt(p[1]) || 0);
+        }
+
+        function paraHorasMinutos(min) {
+            if (min <= 0) return "00:00";
+            return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+        }
+
+        // LÓGICA DA SOMA DE HORAS CUMPRIDAS
+        function adicionarHorasDia() {
+            const fAtual = document.getElementById('horasCompensadas');
+            const fDia = document.getElementById('horasDiaAdd');
+            
+            if (!fDia.value.trim()) {
+                alert("Por favor, digite a quantidade de horas para somar.");
+                return;
+            }
+
+            const mAtual = paraMinutos(fAtual.value);
+            const mDia = paraMinutos(fDia.value);
+
+            if (mDia <= 0) {
+                alert("Por favor, digite um valor de horas válido.");
+                return;
+            }
+
+            const novoTotal = mAtual + mDia;
+            fAtual.value = paraHorasMinutos(novoTotal);
+            fDia.value = '';
+            alert(`Horas somadas com sucesso! Novo saldo compensado: ${fAtual.value}`);
+        }
+
+        function formatarDataBR(dataIso) {
+            if (!dataIso) return '-';
+            const p = dataIso.split('-');
+            return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : dataIso;
+        }
+
+        const orgaosServkollorPadrao = ["ERP SEDE", "DNIT-AMAZONAS", "DNIT-RONDONIA", "SUGESP-CPA", "INSS-PORTO VELHO", "SESAU", "TRT-PORTO VELHO"];
+        const orgaosRenovaPadrao = ["RENOVA - RENOVA ERP SEDE", "DETRAN-ARIQUEMES", "DETRAN-ROLIM DE MOURA", "MP-RO", "PGE"];
+
+        let orgaosServkollor = JSON.parse(localStorage.getItem('orgaos_servkollor_list')) || orgaosServkollorPadrao;
+        let orgaosRenova = JSON.parse(localStorage.getItem('orgaos_renova_list')) || orgaosRenovaPadrao;
+
+        const dadosIniciaisServkollor = [
+            { id: 1, nome: "LÚCIA FERNANDA DA SILVA REIS", orgao: "DNIT-RONDONIA", cidade: "PORTO VELHO", tipoRecesso: "NATAL", dataInicio: "2026-11-01", dataFim: "2026-12-24", horasTotal: "32:00", horasCompensadas: "23:56", verificacao: "09/10/2026", historico: [{ data: "09/10/2026", lancadas: "23:56", saldo: "23:56" }] },
+            { id: 2, nome: "ARLAN VITOR LOPES DOS SANTOS", orgao: "DNIT-RONDONIA", cidade: "PORTO VELHO", tipoRecesso: "ANO NOVO", dataInicio: "2026-11-01", dataFim: "2026-12-31", horasTotal: "32:00", horasCompensadas: "12:20", verificacao: "09/10/2026", historico: [{ data: "09/10/2026", lancadas: "12:20", saldo: "12:20" }] }
+        ];
+
+        const dadosIniciaisRenova = [
+            { id: 101, nome: "CECILIA MAGNO DE OLIVEIRA", orgao: "RENOVA - RENOVA ERP SEDE", cidade: "PORTO VELHO", tipoRecesso: "NATAL", dataInicio: "2026-11-01", dataFim: "2026-12-24", horasTotal: "32:00", horasCompensadas: "00:00", verificacao: "09/10/2026", historico: [] }
+        ];
+
+        let empresaAtual = localStorage.getItem('empresa_ativa') || 'SERVKOLLOR';
+        let modoAdmin = localStorage.getItem('modo_admin') === 'true';
+        let senhaAdmin = "admponto26";
+
+        let bancoServkollor = JSON.parse(localStorage.getItem('bd_servkollor_v15')) || dadosIniciaisServkollor;
+        let bancoRenova = JSON.parse(localStorage.getItem('bd_renova_v15')) || dadosIniciaisRenova;
+
+        function dataAtualFormatada() {
+            const d = new Date();
+            return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+        }
+
+        function getBancoAtual() { return empresaAtual === 'SERVKOLLOR' ? bancoServkollor : bancoRenova; }
+        function setBancoAtual(novo) {
+            if (empresaAtual === 'SERVKOLLOR') {
+                bancoServkollor = novo;
+                localStorage.setItem('bd_servkollor_v15', JSON.stringify(bancoServkollor));
+            } else {
+                bancoRenova = novo;
+                localStorage.setItem('bd_renova_v15', JSON.stringify(bancoRenova));
+            }
+        }
+
+        function toggleModoAdmin() {
+            if (!modoAdmin) {
+                if (prompt("Digite a senha do administrador:") === senhaAdmin) {
+                    modoAdmin = true;
+                    localStorage.setItem('modo_admin', 'true');
+                    aplicarPermissoesUI();
+                } else { alert("Senha incorreta!"); }
+            } else {
+                modoAdmin = false;
+                localStorage.setItem('modo_admin', 'false');
+                aplicarPermissoesUI();
+            }
+        }
+
+        function aplicarPermissoesUI() {
+            const btnLock = document.getElementById('btnLock');
+            const areaForm = document.getElementById('areaFormulario');
+            if (modoAdmin) {
+                document.getElementById('txtLock').innerText = "Modo Edição (Ativo)";
+                btnLock.className = "px-3.5 py-2 bg-emerald-100 text-emerald-800 border-emerald-300 rounded-lg text-xs font-bold border flex items-center gap-1.5";
+                document.getElementById('iconLock').setAttribute('data-lucide', 'unlock');
+                areaForm.classList.remove('opacity-50', 'pointer-events-none');
+            } else {
+                document.getElementById('txtLock').innerText = "Modo Leitura";
+                btnLock.className = "px-3.5 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600 rounded-lg text-xs font-bold border flex items-center gap-1.5";
+                document.getElementById('iconLock').setAttribute('data-lucide', 'lock');
+                areaForm.classList.add('opacity-50', 'pointer-events-none');
+            }
+            lucide.createIcons();
+            renderizarTabela();
+        }
+
+        function mudarEmpresa(empresa) {
+            empresaAtual = empresa;
+            localStorage.setItem('empresa_ativa', empresa);
+            const tabS = document.getElementById('tabServkollor');
+            const tabR = document.getElementById('tabRenova');
+            if (empresa === 'SERVKOLLOR') {
+                tabS.className = "px-6 py-3 font-bold text-sm rounded-t-xl transition-all flex items-center gap-2 bg-white dark:bg-slate-800 text-[#C8102E] border-t-4 border-t-[#C8102E] shadow-sm";
+                tabR.className = "px-6 py-3 font-bold text-sm rounded-t-xl transition-all flex items-center gap-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300";
+                document.getElementById('nomeEmpresaHeader').innerHTML = `<span class="text-[#C8102E]">SERVKOLLOR</span>`;
+            } else {
+                tabR.className = "px-6 py-3 font-bold text-sm rounded-t-xl transition-all flex items-center gap-2 bg-white dark:bg-slate-800 text-emerald-600 border-t-4 border-t-emerald-600 shadow-sm";
+                tabS.className = "px-6 py-3 font-bold text-sm rounded-t-xl transition-all flex items-center gap-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300";
+                document.getElementById('nomeEmpresaHeader').innerHTML = `<span class="text-emerald-600">RENOVA</span>`;
+            }
+            atualizarListaDatalist();
+            atualizarSelectOrgaos();
+            cancelarEdicao();
+            renderizarTabela();
+        }
+
+        function atualizarListaDatalist() {
+            const lista = document.getElementById('listaOrgaosData');
+            lista.innerHTML = '';
+            (empresaAtual === 'SERVKOLLOR' ? orgaosServkollor : orgaosRenova).forEach(org => {
+                const opt = document.createElement('option'); opt.value = org; lista.appendChild(opt);
+            });
+        }
+
+        function atualizarSelectOrgaos() {
+            const select = document.getElementById('filtroOrgaoSelect');
+            select.innerHTML = '<option value="todos">-- TODOS OS ÓRGÃOS --</option>';
+            (empresaAtual === 'SERVKOLLOR' ? orgaosServkollor : orgaosRenova).forEach(org => {
+                const opt = document.createElement('option'); opt.value = org; opt.innerText = org; select.appendChild(opt);
+            });
+        }
+
+        function salvarColaborador(e) {
+            e.preventDefault();
+            if (!modoAdmin) return alert("Ative o Modo Edição.");
+            const id = document.getElementById('editId').value;
+            const nome = document.getElementById('nome').value.trim().toUpperCase();
+            const orgao = document.getElementById('orgaoInput').value.trim().toUpperCase();
+            const cidade = document.getElementById('cidade').value.trim().toUpperCase();
+            const tipoRecesso = document.getElementById('tipoRecesso').value;
+            const dataInicio = document.getElementById('dataInicioCompensa').value;
+            const dataFim = document.getElementById('dataFimCompensa').value;
+            const horasTotal = document.getElementById('horasTotal').value;
+            const horasCompensadas = document.getElementById('horasCompensadas').value;
+            const dtHoje = dataAtualFormatada();
+
+            let banco = getBancoAtual();
+            if (id) {
+                const idx = banco.findIndex(i => i.id == id);
+                if (idx !== -1) {
+                    const hist = banco[idx].historico || [];
+                    hist.push({ data: dtHoje, lancadas: horasCompensadas, saldo: horasCompensadas });
+                    banco[idx] = { ...banco[idx], nome, orgao, cidade, tipoRecesso, dataInicio, dataFim, horasTotal, horasCompensadas, verificacao: dtHoje, historico: hist };
+                }
+            } else {
+                banco.push({ id: Date.now(), nome, orgao, cidade, tipoRecesso, dataInicio, dataFim, horasTotal, horasCompensadas, verificacao: dtHoje, historico: [{ data: dtHoje, lancadas: horasCompensadas, saldo: horasCompensadas }] });
+            }
+            setBancoAtual(banco);
+            cancelarEdicao();
+            renderizarTabela();
+        }
+
+        function editarColaborador(id) {
+            if (!modoAdmin) return alert("Ative o Modo Edição.");
+            const c = getBancoAtual().find(i => i.id == id);
+            if (!c) return;
+            document.getElementById('editId').value = c.id;
+            document.getElementById('nome').value = c.nome;
+            document.getElementById('orgaoInput').value = c.orgao;
+            document.getElementById('cidade').value = c.cidade;
+            document.getElementById('tipoRecesso').value = c.tipoRecesso || 'NATAL';
+            document.getElementById('dataInicioCompensa').value = c.dataInicio || '';
+            document.getElementById('dataFimCompensa').value = c.dataFim || '';
+            document.getElementById('horasTotal').value = c.horasTotal;
+            document.getElementById('horasCompensadas').value = c.horasCompensadas;
+            document.getElementById('btnCancelarEdicao').classList.remove('hidden');
+            window.scrollTo({ top: document.getElementById('areaFormulario').offsetTop - 20, behavior: 'smooth' });
+        }
+
+        function excluirColaborador(id) {
+            if (!modoAdmin) return alert("Ative o Modo Edição.");
+            if (confirm("Remover este colaborador permanentemente?")) {
+                setBancoAtual(getBancoAtual().filter(i => i.id != id));
+                renderizarTabela();
+            }
+        }
+
+        function cancelarEdicao() {
+            document.getElementById('formColaborador').reset();
+            document.getElementById('editId').value = '';
+            document.getElementById('verificacao').value = dataAtualFormatada();
+            document.getElementById('btnCancelarEdicao').classList.add('hidden');
+        }
+
+        function abrirRelatorioIndividual(id) {
+            const c = getBancoAtual().find(i => i.id == id);
+            if (!c) return;
+
+            const minTot = paraMinutos(c.horasTotal);
+            const minComp = paraMinutos(c.horasCompensadas);
+            const minFalta = Math.max(0, minTot - minComp);
+
+            document.getElementById('impEmpresa').innerText = `${empresaAtual} SERVIÇOS`;
+            document.getElementById('impNome').innerText = c.nome;
+            document.getElementById('impOrgao').innerText = c.orgao;
+            document.getElementById('impCidade').innerText = c.cidade;
+            document.getElementById('impRecesso').innerText = c.tipoRecesso || 'NATAL';
+            document.getElementById('impHorasTotal').innerText = c.horasTotal;
+            document.getElementById('impHorasCompensadas').innerText = c.horasCompensadas;
+            document.getElementById('impHorasFalta').innerText = paraHorasMinutos(minFalta);
+
+            const tbody = document.getElementById('impHistCorpo');
+            tbody.innerHTML = '';
+            const hist = c.historico || [];
+            if (hist.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="p-2 text-center text-slate-400">Nenhum histórico registrado.</td></tr>`;
+            } else {
+                hist.forEach(h => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td class="p-2">${h.data}</td><td class="p-2 font-bold">${h.lancadas}</td><td class="p-2 font-bold text-emerald-600">${h.saldo}</td>`;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            document.getElementById('modalImpressaoIndividual').classList.remove('hidden');
+        }
+
+        function fecharModalIndividual() {
+            document.getElementById('modalImpressaoIndividual').classList.add('hidden');
+        }
+
+        function imprimirFichaIndividual() {
+            window.print();
+        }
+
+        function renderizarTabela() {
+            const banco = getBancoAtual();
+            const filtroOrgao = document.getElementById('filtroOrgaoSelect').value;
+            const ordenacao = document.getElementById('ordenacaoSelect').value;
+            const busca = document.getElementById('buscaNome').value.toLowerCase();
+
+            const tbody = document.getElementById('tabelaCorpo');
+            tbody.innerHTML = '';
+
+            let cTotal = 0, cConcluidos = 0, cAndamento = 0, cAtencao = 0;
+
+            let filtrados = banco.filter(c => {
+                const matchOrgao = (filtroOrgao === 'todos') || (c.orgao === filtroOrgao);
+                const matchNome = c.nome.toLowerCase().includes(busca);
+                return matchOrgao && matchNome;
+            });
+
+            filtrados.sort((a, b) => {
+                if (ordenacao === 'nome_asc') return a.nome.localeCompare(b.nome);
+                if (ordenacao === 'nome_desc') return b.nome.localeCompare(a.nome);
+                
+                const pctA = paraMinutos(a.horasTotal) > 0 ? (paraMinutos(a.horasCompensadas) / paraMinutos(a.horasTotal)) : 0;
+                const pctB = paraMinutos(b.horasTotal) > 0 ? (paraMinutos(b.horasCompensadas) / paraMinutos(b.horasTotal)) : 0;
+                
+                if (ordenacao === 'status_atencao') return pctA - pctB;
+                if (ordenacao === 'status_concluido') return pctB - pctA;
+            });
+
+            filtrados.forEach(c => {
+                cTotal++;
+                const minTot = paraMinutos(c.horasTotal);
+                const minComp = paraMinutos(c.horasCompensadas);
+                const minFalta = Math.max(0, minTot - minComp);
+                const pct = minTot > 0 ? Math.min(100, Math.round((minComp / minTot) * 100)) : 0;
+
+                let badge = "bg-rose-100 text-rose-700 border-rose-200";
+                let barColor = "bg-rose-500";
+                let txtS = "Longe da Meta";
+
+                if (pct >= 100) { 
+                    cConcluidos++; 
+                    badge = "bg-emerald-100 text-emerald-700 border-emerald-200"; 
+                    barColor = "bg-emerald-500";
+                    txtS = "Concluído"; 
+                }
+                else if (pct >= 50) { 
+                    cAndamento++; 
+                    badge = "bg-amber-100 text-amber-700 border-amber-200"; 
+                    barColor = "bg-amber-500";
+                    txtS = "Em Andamento"; 
+                }
+                else { cAtencao++; }
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors";
+                tr.innerHTML = `
+                    <td class="p-4"><div class="font-bold text-slate-800 dark:text-slate-100">${c.nome}</div></td>
+                    <td class="p-4"><div class="font-bold text-xs">${c.orgao}</div><div class="text-[11px] text-slate-400">${c.cidade}</div></td>
+                    <td class="p-4 text-center"><span class="px-2 py-0.5 text-[10px] font-bold rounded bg-slate-100 dark:bg-slate-700">${c.tipoRecesso || 'NATAL'}</span></td>
+                    <td class="p-4 text-center font-bold">${c.horasTotal}</td>
+                    <td class="p-4 text-center font-bold text-emerald-600 dark:text-emerald-400">${c.horasCompensadas}</td>
+                    <td class="p-4 text-center font-bold text-slate-400">${paraHorasMinutos(minFalta)}</td>
+                    <td class="p-4 text-center">
+                        <span class="px-2 py-0.5 text-[10px] font-bold rounded-full border ${badge}">${txtS} (${pct}%)</span>
+                        <div class="w-20 bg-slate-200 dark:bg-slate-600 rounded-full h-1.5 mx-auto mt-1.5 overflow-hidden">
+                            <div class="${barColor} h-1.5" style="width: ${pct}%"></div>
+                        </div>
+                    </td>
+                    <td class="p-4 text-center no-print">
+                        <div class="flex items-center justify-center gap-1">
+                            <button onclick="abrirRelatorioIndividual(${c.id})" title="Relatório Individual" class="p-1.5 text-slate-500 hover:text-blue-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700">
+                                <i data-lucide="printer" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="editarColaborador(${c.id})" title="Editar" class="p-1.5 text-slate-500 hover:text-amber-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 ${!modoAdmin ? 'opacity-40' : ''}">
+                                <i data-lucide="edit-3" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="excluirColaborador(${c.id})" title="Excluir" class="p-1.5 text-slate-500 hover:text-rose-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 ${!modoAdmin ? 'opacity-40' : ''}">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('dashTotal').innerText = cTotal;
+            document.getElementById('dashConcluidos').innerText = cConcluidos;
+            document.getElementById('dashEmAndamento').innerText = cAndamento;
+            document.getElementById('dashAtencao').innerText = cAtencao;
+            lucide.createIcons();
+        }
+
+        function exportarExcel() {
+            const banco = getBancoAtual();
+            const dados = banco.map(c => ({
+                "Empresa": empresaAtual, "Colaborador": c.nome, "Órgão": c.orgao, "Cidade": c.cidade,
+                "Tipo Recesso": c.tipoRecesso, "Horas Total": c.horasTotal, "Compensadas": c.horasCompensadas
+            }));
+            const ws = XLSX.utils.json_to_sheet(dados);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Relatorio");
+            XLSX.writeFile(wb, `Compensacao_${empresaAtual}.xlsx`);
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            carregarTema();
+            document.getElementById('verificacao').value = dataAtualFormatada();
+            mudarEmpresa(empresaAtual);
+            aplicarPermissoesUI();
+        });
+    </script>
+</body>
+</html>
